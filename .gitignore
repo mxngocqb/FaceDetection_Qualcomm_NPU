@@ -1,0 +1,15 @@
+# Build artifacts (rebuild from source via build commands in README)
+/face_det_lite
+/cam_detect_web
+/cam_yolo_web
+/yolo_inspect
+*.o
+*.obj
+
+# Runtime/temp
+*.log
+/tmp/
+cam_*.jpg
+*.rgb
+
+# Keep: *.c, *.sh, third_party/, yolov8_w8a8.bin, result.png, *.md

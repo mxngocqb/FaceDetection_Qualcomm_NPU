@@ -61,7 +61,7 @@ $TC/bin/aarch64-linux-gcc -O2 -std=gnu11 \
 ## 4. Deploy
 
 ```bash
-DEV=root@192.168.5.72        # pass: oelinux123
+DEV=root@192.168.5.72        # pass: <device-password>
 scp cam_detect_web run_cam_web.sh $DEV:/opt/face_det_app/
 # DLC face đã có sẵn: /opt/face_det_app/face_det_lite.dlc
 ```
