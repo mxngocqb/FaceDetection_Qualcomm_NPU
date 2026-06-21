@@ -1,0 +1,3 @@
+qai-hub>=0.50.0
+onnx>=1.16
+numpy

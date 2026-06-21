@@ -67,28 +67,43 @@ preprocess → `graphExecute` → postprocess → vẽ box → encode JPEG → *
 
 ```
 .
-├── README.md                 # File này (tổng quan toàn dự án)
-├── README_face_image.md      # Chi tiết App 1 (ảnh tĩnh)
-├── README_camera_web.md      # Chi tiết App 2 (camera face + web)
-├── README_yolo_web.md        # Chi tiết App 3 (camera YOLOv8 + web)
+├── README.md                  # File này (tổng quan toàn dự án)
+├── .gitignore
 │
-├── face_det_lite.c           # App 1: inference 1 ảnh
-├── cam_detect_web.c          # App 2: camera + face + web MJPEG
-├── cam_yolo_web.c            # App 3: camera + YOLOv8 + web MJPEG
-├── yolo_inspect.c            # Tool in I/O (shape/dtype/quant) của DLC/.bin
+├── src/                       # Mã nguồn C
+│   ├── face_det_lite.c        #   App 1: inference 1 ảnh
+│   ├── cam_detect_web.c       #   App 2: camera + face + web MJPEG
+│   ├── cam_yolo_web.c         #   App 3: camera + YOLOv8 + web MJPEG
+│   └── yolo_inspect.c         #   Tool in I/O (shape/dtype/quant) của DLC/.bin
 │
-├── build.sh                  # Cross-compile (mẫu cho face_det_lite)
-├── run_on_device.sh          # Chạy App 1 trên device
-├── run_cam_web.sh            # Chạy App 2 trên device
-├── run_yolo_web.sh           # Chạy App 3 trên device
-├── verify_npu.sh             # Chứng minh inference chạy trên NPU (HTP vs CPU)
+├── third_party/               # stb_image.h, stb_image_write.h (không cần OpenCV)
 │
-├── third_party/              # stb_image.h, stb_image_write.h (đọc/ghi ảnh, không cần OpenCV)
-├── yolov8_w8a8.bin           # Model YOLOv8 (QNN context binary, w8a8) cho QCS6490
-└── result.png                # Ảnh demo App 1
+├── scripts/                   # Build & chạy
+│   ├── build.sh               #   Cross-compile TẤT CẢ app -> build/
+│   ├── run_on_device.sh       #   Chạy App 1 trên device
+│   ├── run_cam_web.sh         #   Chạy App 2 trên device
+│   ├── run_yolo_web.sh        #   Chạy App 3 trên device
+│   └── verify_npu.sh          #   Chứng minh inference chạy trên NPU (HTP vs CPU)
+│
+├── model_compile/             # Tạo model QNN (w8a8) qua Qualcomm AI Hub
+│   ├── compile_yolo_aihub.py  #   ONNX -> quantize w8a8 -> compile context binary
+│   ├── calib_capture.sh       #   Chụp ảnh calibration từ camera (chạy trên device)
+│   ├── requirements.txt
+│   └── README.md
+│
+├── models/
+│   └── yolov8_w8a8.bin        # Model YOLOv8 (QNN context binary, w8a8) cho QCS6490
+│
+├── assets/
+│   └── result.png             # Ảnh demo App 1
+│
+└── docs/                      # Tài liệu chi tiết từng app
+    ├── README_face_image.md
+    ├── README_camera_web.md
+    └── README_yolo_web.md
 ```
 
-> Binary biên dịch (`cam_yolo_web`, `face_det_lite`, ...) **không** được track (xem `.gitignore`) — build lại từ source.
+> Binary biên dịch nằm ở `build/` và **không** được track (xem `.gitignore`) — build lại từ source.
 > File model `.dlc` của FaceDetLite nằm ở `../Model/` (do người dùng cung cấp từ AI Hub).
 
 ---
@@ -106,20 +121,22 @@ export SDK=/đường/dẫn/tới/qairt/2.43.0.260128
 
 ### Build cả 3 app
 ```bash
-CC=$TC/bin/aarch64-linux-gcc
-INC="-I$SDK/include/QNN -Ithird_party"
-$CC -O2 -std=gnu11 $INC face_det_lite.c  -o face_det_lite  -ldl -lm
-$CC -O2 -std=gnu11 $INC cam_detect_web.c -o cam_detect_web -ldl -lm -lpthread
-$CC -O2 -std=gnu11 $INC cam_yolo_web.c   -o cam_yolo_web   -ldl -lm -lpthread
-$CC -O2 -std=gnu11 $INC yolo_inspect.c   -o yolo_inspect   -ldl
+TC=$TC SDK=$SDK bash scripts/build.sh      # output -> build/
+```
+Tương đương (thủ công):
+```bash
+CC=$TC/bin/aarch64-linux-gcc ; INC="-I$SDK/include/QNN -Ithird_party"
+$CC -O2 -std=gnu11 $INC src/face_det_lite.c  -o build/face_det_lite  -ldl -lm
+$CC -O2 -std=gnu11 $INC src/cam_detect_web.c -o build/cam_detect_web -ldl -lm -lpthread
+$CC -O2 -std=gnu11 $INC src/cam_yolo_web.c   -o build/cam_yolo_web   -ldl -lm -lpthread
+$CC -O2 -std=gnu11 $INC src/yolo_inspect.c   -o build/yolo_inspect   -ldl
 ```
 
 ### Deploy
 ```bash
 DEV=root@192.168.5.72            # mật khẩu thiết bị: <device-password>
 ssh $DEV 'mkdir -p /opt/face_det_app'
-scp face_det_lite cam_detect_web cam_yolo_web yolo_inspect \
-    run_*.sh verify_npu.sh yolov8_w8a8.bin $DEV:/opt/face_det_app/
+scp build/* scripts/run_*.sh scripts/verify_npu.sh models/yolov8_w8a8.bin $DEV:/opt/face_det_app/
 scp ../Model/face_det_lite-qnn_dlc-w8a8/face_det_lite.dlc $DEV:/opt/face_det_app/
 ```
 
@@ -137,7 +154,7 @@ Phát hiện khuôn mặt trên 1 ảnh, ghi ảnh có vẽ box.
 ssh root@192.168.5.72 'sh /opt/face_det_app/run_on_device.sh'
 # -> /opt/face_det_app/result.png ; in toạ độ box + score
 ```
-Chi tiết: [README_face_image.md](README_face_image.md). Pipeline: resize 640×480 → grayscale luma →
+Chi tiết: [README_face_image.md](docs/README_face_image.md). Pipeline: resize 640×480 → grayscale luma →
 HTP → sigmoid+maxpool peak → decode box (stride 8) → NMS.
 
 ## 6. App 2 — `cam_detect_web`
@@ -146,7 +163,7 @@ Camera realtime → phát hiện khuôn mặt → xem qua trình duyệt.
 ssh root@192.168.5.72 'cd /opt/face_det_app && setsid sh run_cam_web.sh </dev/null >/tmp/cw.log 2>&1 &'
 # Mở: http://192.168.5.72:8080/
 ```
-Chi tiết: [README_camera_web.md](README_camera_web.md).
+Chi tiết: [README_camera_web.md](docs/README_camera_web.md).
 
 ## 7. App 3 — `cam_yolo_web`
 Camera realtime → **YOLOv8** object detection (80 lớp COCO) → xem qua trình duyệt.
@@ -156,7 +173,7 @@ ssh root@192.168.5.72 'cd /opt/face_det_app && setsid sh run_yolo_web.sh </dev/n
 # Dừng: pkill -9 -f cam_yolo_web; pkill -9 -f gst-launch
 ```
 Endpoints: `/` (HTML), `/stream` (MJPEG), `/snapshot` (JPEG), `/dets` (JSON).
-Chi tiết: [README_yolo_web.md](README_yolo_web.md).
+Chi tiết: [README_yolo_web.md](docs/README_yolo_web.md).
 
 **I/O model YOLOv8** (model đã nhúng decode+sigmoid+argmax):
 `image[1,3,640,640]` uint8 NCHW → `boxes[1,8400,4]` (xyxy), `scores[1,8400]`, `class_idx[1,8400]`.
@@ -167,12 +184,21 @@ Postprocess C: threshold (0.40) → NMS theo lớp (0.45) → nhãn COCO.
 ## 8. Model lấy từ đâu
 
 - **FaceDetLite DLC**: tải sẵn từ Qualcomm AI Hub (`face_det_lite-qnn_dlc-w8a8`) — nạp trực tiếp bằng `systemDlcCreateFromFile`.
-- **YOLOv8** (`yolov8_w8a8.bin`): các DLC/.bin YOLO cũ trên device **không tương thích** QNN runtime,
+- **YOLOv8** (`models/yolov8_w8a8.bin`): các DLC/.bin YOLO cũ trên device **không tương thích** QNN runtime,
   nên tạo mới qua **Qualcomm AI Hub** bằng `qai-hub` (cần free API token):
   1. ONNX YOLOv8 (đã nhúng hậu xử lý) → upload.
   2. **Quantize job** w8a8 (INT8) với ảnh calibration chụp từ camera.
   3. **Compile job** `--target_runtime qnn_context_binary --quantize_io` → `yolov8_w8a8.bin`.
      (HTP **bắt buộc** I/O quantized; bản float bị từ chối / crash khi compose.)
+
+  → Quy trình tự động hoá trong **[`model_compile/`](model_compile/README.md)**:
+  ```bash
+  pip install -r model_compile/requirements.txt
+  qai-hub configure --api_token <FREE_TOKEN>
+  # chụp calib trên device rồi:
+  python3 model_compile/compile_yolo_aihub.py --onnx yolo.onnx --calib-dir ./calib \
+      --device "Dragonwing RB3 Gen 2 Vision Kit" --out models/yolov8_w8a8.bin
+  ```
 
 Tool kiểm tra I/O bất kỳ DLC/.bin: `./yolo_inspect <model.dlc|model.bin>`.
 
