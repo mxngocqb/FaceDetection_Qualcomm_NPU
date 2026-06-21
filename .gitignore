@@ -3,6 +3,12 @@
 *.o
 *.obj
 
+# Stale build binaries (if built at root)
+/face_det_lite
+/cam_detect_web
+/cam_yolo_web
+/yolo_inspect
+
 # Model compile temp
 model_compile/calib/
 *_single.onnx
